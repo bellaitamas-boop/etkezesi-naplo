@@ -1,0 +1,11 @@
+{
+  "name": "etkezesi-naplo-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Helyben tároló, magyar nyelvű étkezési napló PWA",
+  "scripts": {
+    "start": "node --experimental-modules tools/dev-server.js",
+    "test": "node --experimental-modules tests/run-tests.js"
+  }
+}
