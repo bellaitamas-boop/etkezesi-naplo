@@ -1,5 +1,5 @@
 import { getAll, getByKey, put, remove, replaceJournalAtomically, mergeJournalAtomically, deleteMealDataAtomically } from './db.js';
-import { CATEGORIES, categoryMap, localDate, localTime, parseLocalDate, addDays, daysBetween, startOfWeek, suggestedCategory, formatDate, uuid, validateEntry, compareEntries, escapeHtml, isValidRange } from './core.js';
+import { CATEGORIES, categoryMap, localDate, localTime, parseLocalDate, addDays, daysBetween, startOfWeek, weekSwipeOffset, suggestedCategory, formatDate, uuid, validateEntry, compareEntries, escapeHtml, isValidRange } from './core.js';
 import { buildBackup, suggestedBackupName, validateBackup, createMergePreview, finalizeMergePlan } from './backup.js';
 import { createJournalPdf } from './pdf.js';
 
@@ -16,6 +16,7 @@ const state = {
 
 const app = document.querySelector('#app');
 const modalRoot = document.querySelector('#modal-root');
+let suppressCalendarClickUntil = 0;
 
 boot().catch(error => fatal(error));
 
@@ -53,8 +54,10 @@ function renderJournal() {
   const weekDays = daysBetween(week, addDays(week,6));
   const selected = state.entries.filter(item=>item.mealDate===state.selectedDate).sort(compareEntries);
   return `<section>
-    <div class="date-controls"><button class="icon-button" data-action="prev-week" aria-label="Előző hét">‹</button><strong>${formatDate(week,{month:'long',day:'numeric'})} – ${formatDate(addDays(week,6),{month:'long',day:'numeric'})}</strong><button class="icon-button" data-action="next-week" aria-label="Következő hét">›</button></div>
-    <div class="week-strip">${weekDays.map(day=>renderDay(day)).join('')}</div>
+    <div class="calendar-swipe" data-calendar-swipe role="group" aria-label="Heti naptár. Húzd balra vagy jobbra a hetek váltásához.">
+      <div class="date-controls"><button class="icon-button" data-action="prev-week" aria-label="Előző hét">‹</button><strong>${formatDate(week,{month:'long',day:'numeric'})} – ${formatDate(addDays(week,6),{month:'long',day:'numeric'})}</strong><button class="icon-button" data-action="next-week" aria-label="Következő hét">›</button></div>
+      <div class="week-strip">${weekDays.map(day=>renderDay(day)).join('')}</div>
+    </div>
     <div class="date-controls"><button class="ghost-button" data-action="pick-date">📅 Dátum választása</button></div>
     <div>${selected.length?selected.map(renderEntry).join(''):`<div class="empty-state"><div class="empty-icon">🍽️</div><strong>Még nincs bejegyzés erre a napra</strong><p>Az üres nap nem jelenti azt, hogy nem ettél.</p></div>`}</div>
     <button class="fab" data-action="new-entry" aria-label="Új bejegyzés">+</button>
@@ -87,15 +90,15 @@ function renderSettings() {
   const last=state.settings.lastFullBackupConfirmedAt?new Intl.DateTimeFormat('hu-HU',{dateStyle:'medium',timeStyle:'short'}).format(new Date(state.settings.lastFullBackupConfirmedAt)):'Még nincs visszaigazolt teljes mentés';
   return `<section>
     <h2 class="section-title">Emlékeztetők</h2><div class="card"><div class="settings-row"><div><div class="settings-row-title">Esti naplóellenőrzés</div><div class="small muted">Csak az alkalmazás használatakor jelez.</div></div><input class="toggle" id="evening-toggle" type="checkbox" ${state.settings.eveningReminderEnabled?'checked':''} aria-label="Esti emlékeztető"></div><div class="settings-row"><label for="evening-time" class="settings-row-title">Időpont</label><input id="evening-time" type="time" value="${state.settings.eveningReminderTime}" ${state.settings.eveningReminderEnabled?'':'disabled'}></div></div>
-    <h2 class="section-title">Biztonsági mentés</h2><div class="card"><p class="small muted">${last}</p><div class="settings-row"><div><div class="settings-row-title">JSON-mentés készítése</div><div class="small muted">Teljes vagy dátumtartomány szerinti mentés.</div></div><button class="secondary" data-action="backup">Megnyitás</button></div><div class="settings-row"><div><div class="settings-row-title">Mentés visszaállítása</div><div class="small muted">Teljes csere vagy intelligens egyesítés.</div></div><button class="secondary" data-action="restore">Fájl választása</button></div></div>
+    <h2 class="section-title">Biztonsági mentés</h2><div class="card"><p class="small muted">${last}</p><div class="settings-row"><div><div class="settings-row-title">Biztonsági mentés készítése</div><div class="small muted">Az összes adat vagy egy kiválasztott időszak mentése fájlba.</div></div><button class="secondary" data-action="backup">Megnyitás</button></div><div class="settings-row"><div><div class="settings-row-title">Biztonsági mentés visszaállítása</div><div class="small muted">Korábbi mentés betöltése teljes cserével vagy intelligens egyesítéssel.</div></div><button class="secondary" data-action="restore">Fájl választása</button></div></div>
     <h2 class="section-title">Alkalmazás</h2><div class="card"><div class="settings-row"><div><div class="settings-row-title">Bemutató újraindítása</div><div class="small muted">A három első indítási képernyő megnyitása.</div></div><button class="secondary" data-action="onboarding">Indítás</button></div><div class="settings-row"><div><div class="settings-row-title">Összes étkezési adat törlése</div><div class="small muted">A bejegyzések és az aktív piszkozat törlése.</div></div><button class="danger-button" data-action="delete-all">Törlés</button></div></div>
-    <div class="warning small">Az adatok ezen az eszközön maradnak. Az alkalmazás eltávolítása vagy a böngészőadatok törlése adatvesztést okozhat, ezért készíts rendszeresen teljes JSON-mentést.</div>
+    <div class="warning small">Az adatok ezen az eszközön maradnak. Az alkalmazás eltávolítása vagy a böngészőadatok törlése adatvesztést okozhat, ezért készíts rendszeresen teljes biztonsági mentést.</div>
   </section>`;
 }
 
 function bindMainEvents() {
   app.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>{state.view=button.dataset.view;render();});
-  app.querySelectorAll('[data-date]').forEach(button=>button.onclick=()=>{state.selectedDate=button.dataset.date;render();});
+  app.querySelectorAll('[data-date]').forEach(button=>button.onclick=()=>{if(Date.now()<suppressCalendarClickUntil)return;state.selectedDate=button.dataset.date;render();});
   app.querySelectorAll('[data-expand]').forEach(button=>button.onclick=e=>{e.stopPropagation();const id=button.dataset.expand;state.expanded.has(id)?state.expanded.delete(id):state.expanded.add(id);render();});
   app.querySelectorAll('[data-entry-id]').forEach(card=>card.onclick=e=>{if(e.target.closest('[data-expand]'))return;openEditor(state.entries.find(x=>x.id===card.dataset.entryId));});
   app.querySelectorAll('[data-range]').forEach(button=>button.onclick=()=>setReportRange(button.dataset.range));
@@ -105,6 +108,41 @@ function bindMainEvents() {
   const toggle=app.querySelector('#evening-toggle'); if(toggle)toggle.onchange=()=>saveSettings({eveningReminderEnabled:toggle.checked});
   const time=app.querySelector('#evening-time'); if(time)time.onchange=()=>saveSettings({eveningReminderTime:time.value});
   app.querySelectorAll('[data-action]').forEach(button=>button.onclick=()=>handleAction(button.dataset.action));
+  bindCalendarSwipe();
+}
+
+function bindCalendarSwipe() {
+  const surface=app.querySelector('[data-calendar-swipe]');
+  if(!surface || !window.PointerEvent)return;
+  let pointerId=null,startX=0,startY=0,dragging=false;
+  const reset=()=>{pointerId=null;dragging=false;surface.classList.remove('is-dragging');surface.style.transform='';surface.style.opacity='';};
+  surface.onpointerdown=event=>{
+    if(event.pointerType==='mouse'&&event.button!==0)return;
+    pointerId=event.pointerId;startX=event.clientX;startY=event.clientY;dragging=false;
+  };
+  surface.onpointermove=event=>{
+    if(event.pointerId!==pointerId)return;
+    const deltaX=event.clientX-startX,deltaY=event.clientY-startY;
+    if(!dragging&&Math.abs(deltaX)>8&&Math.abs(deltaX)>Math.abs(deltaY)*1.2){
+      dragging=true;surface.classList.add('is-dragging');
+      try{surface.setPointerCapture(pointerId);}catch(error){}
+    }
+    if(dragging){
+      const offset=Math.max(-28,Math.min(28,deltaX*.24));
+      surface.style.transform=`translateX(${offset}px)`;
+      surface.style.opacity=String(Math.max(.78,1-Math.abs(deltaX)/700));
+    }
+  };
+  surface.onpointerup=event=>{
+    if(event.pointerId!==pointerId)return;
+    const offset=weekSwipeOffset(event.clientX-startX,event.clientY-startY);
+    reset();
+    if(!offset)return;
+    suppressCalendarClickUntil=Date.now()+350;
+    state.selectedDate=addDays(state.selectedDate,offset);
+    render();
+  };
+  surface.onpointercancel=reset;
 }
 
 function handleAction(action) {
@@ -229,7 +267,7 @@ function showPdfPreview() {
 }
 
 function showBackupDialog() {
-  showModal(`<h2>JSON-biztonsági mentés</h2><div class="segmented"><button class="active" data-backup-type="full">Teljes mentés</button><button data-backup-type="partial">Részleges mentés</button></div><div id="partial-range" hidden><div class="two-col"><div class="field"><label>Kezdőnap<input id="backup-start" type="date" value="${addDays(localDate(),-6)}"></label></div><div class="field"><label>Zárónap<input id="backup-end" type="date" value="${localDate()}"></label></div></div></div><div class="card"><label class="settings-row">Alkalmazásbeállítások mentése <input class="toggle" id="backup-settings" type="checkbox" checked></label><label class="settings-row">Aktív piszkozat mentése <input class="toggle" id="backup-draft" type="checkbox" checked></label></div><div id="backup-summary" class="warning small"></div><div class="modal-actions"><button class="primary" id="create-backup">Mentési fájl letöltése</button><button class="secondary" id="share-backup">Megosztás</button><button class="secondary" data-close>Vissza</button></div>`);
+  showModal(`<h2>Biztonsági mentés készítése</h2><div class="segmented"><button class="active" data-backup-type="full">Teljes mentés</button><button data-backup-type="partial">Részleges mentés</button></div><div id="partial-range" hidden><div class="two-col"><div class="field"><label>Kezdőnap<input id="backup-start" type="date" value="${addDays(localDate(),-6)}"></label></div><div class="field"><label>Zárónap<input id="backup-end" type="date" value="${localDate()}"></label></div></div></div><div class="card"><label class="settings-row">Alkalmazásbeállítások mentése <input class="toggle" id="backup-settings" type="checkbox" checked></label><label class="settings-row">Aktív piszkozat mentése <input class="toggle" id="backup-draft" type="checkbox" checked></label></div><div id="backup-summary" class="warning small"></div><div class="modal-actions"><button class="primary" id="create-backup">Mentési fájl letöltése</button><button class="secondary" id="share-backup">Megosztás</button><button class="secondary" data-close>Vissza</button></div>`);
   let type='full';
   const update=()=>{const start=modalRoot.querySelector('#backup-start').value,end=modalRoot.querySelector('#backup-end').value;const count=type==='full'?state.entries.length:state.entries.filter(x=>x.mealDate>=start&&x.mealDate<=end).length;modalRoot.querySelector('#backup-summary').textContent=type==='full'?`Teljes, katasztrófa utáni helyreállításra alkalmas mentés · ${count} bejegyzés`:`Részleges mentés · ${count} bejegyzés. Ez nem helyettesíti a teljes biztonsági mentést.`;};
   modalRoot.querySelectorAll('[data-backup-type]').forEach(button=>button.onclick=()=>{type=button.dataset.backupType;modalRoot.querySelectorAll('[data-backup-type]').forEach(x=>x.classList.toggle('active',x===button));modalRoot.querySelector('#partial-range').hidden=type==='full';update();});
@@ -256,7 +294,7 @@ function askBackupConfirmation() {
 function chooseRestoreFile() {
   const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{
     const file=input.files?.[0];if(!file)return;
-    try{const data=JSON.parse(await file.text());const validation=validateBackup(data);if(!validation.valid){showModal(`<h2>A fájl nem importálható</h2><div class="warning">${validation.errors.map(escapeHtml).join('<br>')}</div><div class="modal-actions"><button class="secondary" data-close>Bezárás</button></div>`);return;}state.importData=data;showRestoreMode();}catch(error){toast('A fájl nem olvasható vagy nem érvényes JSON. Semmi sem változott.','error');}
+    try{const data=JSON.parse(await file.text());const validation=validateBackup(data);if(!validation.valid){showModal(`<h2>A fájl nem importálható</h2><div class="warning">${validation.errors.map(escapeHtml).join('<br>')}</div><div class="modal-actions"><button class="secondary" data-close>Bezárás</button></div>`);return;}state.importData=data;showRestoreMode();}catch(error){toast('A fájl nem olvasható vagy nem érvényes biztonsági mentés. Semmi sem változott.','error');}
   };input.click();
 }
 
@@ -305,7 +343,7 @@ function confirmDeleteAll() {
 
 function showOnboarding(replay=false) {
   state.onboardingPage=0;
-  const pages=[['📝','Étkezések rögzítése','Írd le, mit ettél vagy ittál, lehetőleg az összetevőkkel és mennyiségekkel. A kategória és az időpont módosítható.'],['📄','Orvosi PDF','Válassz dátumtartományt, majd készíts áttekinthető, megosztható jelentést.'],['🔒','Helyi adatok és mentés','A napló az eszközödön marad. Készíts rendszeresen teljes JSON-biztonsági mentést, mert az alkalmazás eltávolításakor az adatok elveszhetnek.']];
+  const pages=[['📝','Étkezések rögzítése','Írd le, mit ettél vagy ittál, lehetőleg az összetevőkkel és mennyiségekkel. A kategória és az időpont módosítható.'],['📄','Orvosi PDF','Válassz dátumtartományt, majd készíts áttekinthető, megosztható jelentést.'],['🔒','Helyi adatok és mentés','A napló az eszközödön marad. Készíts rendszeresen teljes biztonsági mentést, mert az alkalmazás eltávolításakor az adatok elveszhetnek.']];
   const draw=()=>{const [icon,title,text]=pages[state.onboardingPage];modalRoot.innerHTML=`<section class="onboarding"><div class="onboarding-card"><div class="onboarding-visual">${icon}</div><h1>${title}</h1><p>${text}</p><div class="dots">${pages.map((_,i)=>`<i class="${i===state.onboardingPage?'active':''}"></i>`).join('')}</div><div class="onboarding-actions"><button class="secondary" id="onboarding-skip">Kihagyás</button><button class="primary" id="onboarding-next">${state.onboardingPage===pages.length-1?'Kezdés':'Tovább'}</button></div></div></section>`;modalRoot.querySelector('#onboarding-skip').onclick=finish;modalRoot.querySelector('#onboarding-next').onclick=()=>{if(state.onboardingPage<pages.length-1){state.onboardingPage++;draw();}else finish();};};
   const finish=async()=>{if(!replay)await saveSettings({onboardingDone:true},false);modalRoot.innerHTML='';if(!replay)setTimeout(runOpenReminders,150);};draw();
 }
@@ -342,3 +380,4 @@ async function shareFile(blob,fileName,mime) {
 
 function registerServiceWorker(){if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>toast('Az offline mód előkészítése nem sikerült.','error')));}
 function fatal(error){app.innerHTML=`<main class="app-shell"><div class="card"><h1>Az alkalmazás nem indítható</h1><p>${escapeHtml(error.message||String(error))}</p><p class="muted">Próbáld újratölteni az oldalt. Ha a hiba megmarad, ne töröld a böngésző adatait, mert azok tartalmazhatják a naplót.</p></div></main>`;}
+

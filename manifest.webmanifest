@@ -1,7 +1,7 @@
 {
   "name": "Étkezési Napló",
   "short_name": "Étkezési Napló",
-  "description": "Helyben tárolt étkezési napló PDF- és JSON-exporttal.",
+  "description": "Helyben tárolt étkezési napló PDF-jelentéssel és biztonsági mentéssel.",
   "lang": "hu-HU",
   "id": "./",
   "start_url": "./",
@@ -16,3 +16,4 @@
     {"src":"icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
   ]
 }
+

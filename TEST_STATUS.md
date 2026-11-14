@@ -4,7 +4,7 @@
 
 ## Sikeresen ellenőrizve
 
-- 9 automatikus teszt sikeres (`npm test`).
+- 10 automatikus teszt sikeres (`npm test`).
 - Az alkalmazás helyi szerverről betöltődik, a konzolon nem jelent meg alkalmazáshiba.
 - A háromlépéses onboarding befejezhető, és frissítés után nem indul újra.
 - Három bejegyzés létrehozása, köztük két azonos kategóriájú és egy hosszú, többsoros, `ő/ű` karaktereket tartalmazó leírás.
@@ -38,6 +38,7 @@
 - Mentett bejegyzés szerkesztésének folytatásakor az eredeti állapot megmarad, ezért a későbbi bezárás továbbra is helyesen érzékeli a mentetlen módosításokat.
 - A PDF- és JSON-műveletek külön, determinisztikus Letöltés gombot kaptak a Megosztás mellett; a megszakított vagy nem támogatott megosztás többé nem számít sikeres fájlmentésnek.
 - A PDF napi blokkjai már a tényleges tartalomhoz igazodó magasságúak; a hosszú ételleírások fehér bejegyzéskártyákban törnek, a többoldalas napok ismételt „folytatás” fejlécet kapnak, és az `ő/ű` ékezetek pozicionálása pontosabb lett.
+- A biztonsági mentés felhasználói szövegei nem használnak technikai „JSON” megnevezést; a heti naptár érintéssel balra és jobbra húzva is váltható.
 
 ## Nem ellenőrzött – kötelező következő lépések
 

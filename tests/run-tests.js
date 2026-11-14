@@ -2,7 +2,7 @@ import assert from 'assert';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { suggestedCategory, addDays, daysBetween, startOfWeek, validateEntry, isValidRange } from '../core.js';
+import { suggestedCategory, addDays, daysBetween, startOfWeek, weekSwipeOffset, validateEntry, isValidRange } from '../core.js';
 import { buildBackup, validateBackup, createMergePreview, finalizeMergePlan } from '../backup.js';
 import { createJournalPdf } from '../pdf.js';
 
@@ -35,6 +35,13 @@ test('dátumműveletek hónaphatáron is helyesek',()=>{
   assert.strictEqual(addDays('2026-11-01',-1),'2026-10-31');
   assert.deepStrictEqual(daysBetween('2026-11-01','2026-11-03'),['2026-11-01','2026-11-02','2026-11-03']);
   assert.strictEqual(startOfWeek('2026-11-14'),'2026-11-09');
+});
+
+test('a heti naptár vízszintes húzása hetet vált, a függőleges görgetés nem',()=>{
+  assert.strictEqual(weekSwipeOffset(-80,10),7);
+  assert.strictEqual(weekSwipeOffset(80,10),-7);
+  assert.strictEqual(weekSwipeOffset(30,4),0);
+  assert.strictEqual(weekSwipeOffset(70,90),0);
 });
 
 test('hibás tartományt és üres leírást elutasít',()=>{

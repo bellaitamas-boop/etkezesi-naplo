@@ -45,6 +45,11 @@ export function startOfWeek(value) {
   return localDate(date);
 }
 
+export function weekSwipeOffset(deltaX, deltaY, threshold = 45) {
+  if (Math.abs(deltaX) < threshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2) return 0;
+  return deltaX < 0 ? 7 : -7;
+}
+
 export function suggestedCategory(time) {
   const minutes = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
   if (minutes >= 300 && minutes < 600) return 'breakfast';
@@ -87,3 +92,4 @@ export function escapeHtml(value) {
 export function isValidRange(start, end) {
   return /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end) && start <= end;
 }
+
