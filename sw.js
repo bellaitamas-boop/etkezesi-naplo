@@ -1,4 +1,4 @@
-const CACHE = 'etkezesi-naplo-v3';
+const CACHE = 'etkezesi-naplo-v4';
 const APP_SHELL = [
   './','./index.html','./styles.css','./app.js','./db.js','./core.js','./backup.js','./pdf.js',
   './manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-maskable-512.png'
@@ -23,3 +23,4 @@ self.addEventListener('fetch', event => {
     return response;
   })));
 });
+
