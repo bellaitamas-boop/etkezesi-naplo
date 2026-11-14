@@ -1,8 +1,7 @@
-const CACHE = 'etkezesi-naplo-v2';
+const CACHE = 'etkezesi-naplo-v3';
 const APP_SHELL = [
   './','./index.html','./styles.css','./app.js','./db.js','./core.js','./backup.js','./pdf.js',
-  './manifest.webmanifest','./icons/icon.svg','./icons/icon-192.svg','./icons/icon-512.svg',
-  './icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-512.png'
+  './manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-maskable-512.png'
 ];
 
 self.addEventListener('install', event => {
