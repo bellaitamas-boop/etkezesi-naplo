@@ -17,6 +17,7 @@ const state = {
 const app = document.querySelector('#app');
 const modalRoot = document.querySelector('#modal-root');
 let suppressCalendarClickUntil = 0;
+let fabObserver = null;
 let modalReturnFocus = null;
 let modalKeyHandler = null;
 let modalEscapeHandler = null;
@@ -73,7 +74,7 @@ function renderJournal() {
     <div>${selected.length?selected.map(renderEntry).join(''):`<div class="empty-state"><div class="empty-icon" aria-hidden="true">🍽️</div><strong>Még nincs bejegyzés erre a napra</strong><p>Az üres nap nem jelenti azt, hogy nem ettél. Rögzítsd akkor, amikor kényelmes.</p><button class="primary empty-action" data-action="new-entry">Étkezés rögzítése</button></div>`}</div>
     ${recent.length?renderRecentMeals(recent):''}
     ${state.selectedDate===today?renderWeeklySummary():''}
-    <button class="fab" data-action="new-entry" aria-label="Új bejegyzés">+</button>
+    <button class="fab" data-action="new-entry" aria-label="Új bejegyzés" aria-hidden="true" tabindex="-1">+</button>
   </section>`;
 }
 
@@ -150,6 +151,21 @@ function bindMainEvents() {
   const time=app.querySelector('#evening-time'); if(time)time.onchange=()=>saveSettings({eveningReminderTime:time.value});
   app.querySelectorAll('[data-action]').forEach(button=>button.onclick=()=>handleAction(button.dataset.action));
   bindCalendarSwipe();
+  bindFabVisibility();
+}
+
+function bindFabVisibility() {
+  if(fabObserver){fabObserver.disconnect();fabObserver=null;}
+  const primary=app.querySelector('.daily-primary'),fab=app.querySelector('.fab');
+  if(!fab)return;
+  const setVisible=visible=>{
+    fab.classList.toggle('is-visible',visible);
+    fab.setAttribute('aria-hidden',String(!visible));
+    fab.tabIndex=visible?0:-1;
+  };
+  if(!primary||!('IntersectionObserver' in window)){setVisible(true);return;}
+  fabObserver=new IntersectionObserver(([entry])=>setVisible(!entry.isIntersecting),{threshold:.05});
+  fabObserver.observe(primary);
 }
 
 function bindCalendarSwipe() {

@@ -34,6 +34,7 @@
 - Valódi Android Chrome-ban a GitHub Pages-verzió megnyílt, telepíthető volt, és az alapvető naplóhasználat a felhasználói próba alapján jól működött.
 - Az első használatot a mentési emlékeztető már nem szakítja meg; csak hét nap után jelenik meg, nem blokkoló kártyaként.
 - A napi állapotkártya, a nagy rögzítőgomb, a legutóbbi különböző étkezések gyors újrafelvétele és a semleges 7 napos összegzés elkészült.
+- A jobb alsó lebegő `+` csak akkor jelenik meg, amikor a nagy napi rögzítőgomb már nincs a látható területen.
 - A favicon hivatkozása létező PNG-fájlra mutat; a kijelölt napok, kategóriák, bejegyzéskártyák és párbeszédablakok akadálymentesebb állapot- és fókuszkezelést kaptak.
 
 ## A megvalósítás során javított hibák

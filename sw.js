@@ -1,4 +1,4 @@
-const CACHE = 'etkezesi-naplo-v6';
+const CACHE = 'etkezesi-naplo-v7';
 const APP_SHELL = [
   './','./index.html','./styles.css','./app.js','./db.js','./core.js','./backup.js','./pdf.js',
   './manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-maskable-512.png'

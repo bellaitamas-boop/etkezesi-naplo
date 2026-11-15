@@ -6,17 +6,18 @@
 2. Nyisd meg a fejlesztői konzolt; ne legyen JavaScript-hiba.
 3. Végezd el az onboardingot, majd frissítsd az oldalt: normál esetben ne induljon újra.
 4. Új telepítésnél ellenőrizd, hogy nem jelenik meg azonnal mentési emlékeztető, és a nagy napi rögzítőgomb megnyitja a szerkesztőt.
-5. Rögzíts legalább három bejegyzést, köztük két azonos kategóriájút és egy hosszú, több soros leírást.
-6. Ellenőrizd, hogy a napi és a 7 napos összegzés helyesen számol, a naptári napokon pedig a bejegyzésszám látható.
-7. Egy következő napon nyisd meg az egyik korábbi étkezést a gyors újrafelvétellel; a leírás és kategória legyen előre kitöltve, de mentés előtt szerkeszthető.
-8. A heti naptárat húzd balra és jobbra: a hét váltson, a függőleges oldalgörgetés maradjon használható.
-9. Frissítsd az oldalt: a bejegyzések maradjanak meg és legyenek időrendben.
-10. Kezdj új bejegyzést, írj bele, majd zárd be: a piszkozat legyen folytatható.
-11. Szerkessz mentett bejegyzést, majd zárd be mentés nélkül: jelenjen meg a három választás.
-12. Billentyűzettel ellenőrizd a párbeszédablak fókuszcsapdáját, az Escape bezárást és a bejegyzés Szerkesztés gombjának elérését.
-13. Készíts 7 napos PDF-et úgy, hogy legyen benne üres nap, hosszú leírás, valamint `ő` és `ű` karakter.
-14. Készíts teljes biztonsági mentést, majd próbáld visszaállítani intelligens egyesítéssel.
-15. Próbálj idegen vagy hibás mentési fájlt importálni; az adatbázis ne változzon.
+5. Amíg a nagy napi rögzítőgomb látható, a jobb alsó lebegő `+` legyen rejtve; lefelé görgetve jelenjen meg, visszagörgetve pedig tűnjön el.
+6. Rögzíts legalább három bejegyzést, köztük két azonos kategóriájút és egy hosszú, több soros leírást.
+7. Ellenőrizd, hogy a napi és a 7 napos összegzés helyesen számol, a naptári napokon pedig a bejegyzésszám látható.
+8. Egy következő napon nyisd meg az egyik korábbi étkezést a gyors újrafelvétellel; a leírás és kategória legyen előre kitöltve, de mentés előtt szerkeszthető.
+9. A heti naptárat húzd balra és jobbra: a hét váltson, a függőleges oldalgörgetés maradjon használható.
+10. Frissítsd az oldalt: a bejegyzések maradjanak meg és legyenek időrendben.
+11. Kezdj új bejegyzést, írj bele, majd zárd be: a piszkozat legyen folytatható.
+12. Szerkessz mentett bejegyzést, majd zárd be mentés nélkül: jelenjen meg a három választás.
+13. Billentyűzettel ellenőrizd a párbeszédablak fókuszcsapdáját, az Escape bezárást és a bejegyzés Szerkesztés gombjának elérését.
+14. Készíts 7 napos PDF-et úgy, hogy legyen benne üres nap, hosszú leírás, valamint `ő` és `ű` karakter.
+15. Készíts teljes biztonsági mentést, majd próbáld visszaállítani intelligens egyesítéssel.
+16. Próbálj idegen vagy hibás mentési fájlt importálni; az adatbázis ne változzon.
 
 ## 2. Valódi Android-teszt – részben elvégezve, folytatandó
 
