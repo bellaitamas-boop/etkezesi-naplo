@@ -109,7 +109,7 @@ test('az offline alkalmazáshéj minden hivatkozott fájlja létezik',()=>{
   const sw=fs.readFileSync(path.join(projectRoot,'sw.js'),'utf8');
   const match=sw.match(/const APP_SHELL = \[([\s\S]*?)\];/);
   assert.ok(match);
-  const files=[...match[1].matchAll(/'\.\/([^']*)'/g)].map(item=>item[1]||'index.html');
+  const files=[...match[1].matchAll(/'\.\/([^']*)'/g)].map(item=>(item[1]||'index.html').split('?')[0]);
   for(const file of files) assert.ok(fs.existsSync(path.join(projectRoot,file || 'index.html')),`Hiányzó fájl: ${file}`);
 });
 
