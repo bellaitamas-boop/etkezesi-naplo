@@ -1,10 +1,10 @@
 # Étkezési Napló 1.0 – aktuális ellenőrzési állapot
 
-**Dátum:** 2026. november 14.
+**Dátum:** 2026. november 15.
 
 ## Sikeresen ellenőrizve
 
-- 10 automatikus teszt sikeres (`npm test`).
+- 14 automatikus teszt sikeres (`npm test`).
 - Az alkalmazás helyi szerverről betöltődik, a konzolon nem jelent meg alkalmazáshiba.
 - A háromlépéses onboarding befejezhető, és frissítés után nem indul újra.
 - Három bejegyzés létrehozása, köztük két azonos kategóriájú és egy hosszú, többsoros, `ő/ű` karaktereket tartalmazó leírás.
@@ -31,6 +31,10 @@
 - Intelligens egyesítés: duplikációkerülés, frissítés és konfliktusjelzés.
 - PWA-manifest érvényessége és ikonfájlok megléte.
 - Service worker alkalmazáshéjában felsorolt fájlok megléte.
+- Valódi Android Chrome-ban a GitHub Pages-verzió megnyílt, telepíthető volt, és az alapvető naplóhasználat a felhasználói próba alapján jól működött.
+- Az első használatot a mentési emlékeztető már nem szakítja meg; csak hét nap után jelenik meg, nem blokkoló kártyaként.
+- A napi állapotkártya, a nagy rögzítőgomb, a legutóbbi különböző étkezések gyors újrafelvétele és a semleges 7 napos összegzés elkészült.
+- A favicon hivatkozása létező PNG-fájlra mutat; a kijelölt napok, kategóriák, bejegyzéskártyák és párbeszédablakok akadálymentesebb állapot- és fókuszkezelést kaptak.
 
 ## A megvalósítás során javított hibák
 
@@ -43,9 +47,9 @@
 ## Nem ellenőrzött – kötelező következő lépések
 
 - Látható, interaktív asztali Chrome-teszt. Az alkalmazás Chrome-ban megnyílt, de az automatizálási biztonsági réteg nem engedte a Chrome-ablak vezérlését; a sikeres kézi folyamatok az alkalmazáson belüli Chromium-böngészőben futottak.
-- Valódi Android Chrome és telepített PWA teszt.
 - Offline újraindítás valódi Android-eszközön.
-- Android Share Sheet, PDF-előnézet és JSON fájlkezelés.
+- Android Share Sheet, PDF-előnézet és biztonsági mentési fájlkezelés teljes, dokumentált ellenőrzése.
+- Az Android-próba eszközmodelljének, Android- és Chrome-verziójának dokumentálása.
 - Valódi iPhone/Safari/PWA teszt, amikor rendelkezésre áll készülék.
 
 Részletes kézi forgatókönyvek: `TESTING.md`.

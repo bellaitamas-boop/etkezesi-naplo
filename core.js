@@ -93,3 +93,39 @@ export function isValidRange(start, end) {
   return /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end) && start <= end;
 }
 
+export function isBackupReminderDue(settings, now = new Date()) {
+  const snoozedUntil = settings && settings.backupSnoozedUntil ? new Date(settings.backupSnoozedUntil) : null;
+  if (snoozedUntil && !Number.isNaN(snoozedUntil.getTime()) && snoozedUntil > now) return false;
+  const referenceValue = settings && (settings.lastFullBackupConfirmedAt || settings.firstUsedAt);
+  if (!referenceValue) return false;
+  const reference = new Date(referenceValue);
+  if (Number.isNaN(reference.getTime())) return false;
+  return now.getTime() - reference.getTime() >= 7 * 86400000;
+}
+
+export function weeklyLogSummary(entries, endDate = localDate()) {
+  const days = daysBetween(addDays(endDate, -6), endDate);
+  const range = new Set(days);
+  const logged = new Set(entries.filter(item => range.has(item.mealDate)).map(item => item.mealDate));
+  return {
+    days,
+    loggedDays: logged.size,
+    missingDays: days.filter(day => !logged.has(day))
+  };
+}
+
+export function recentMealTemplates(entries, beforeDate, limit = 3) {
+  const seen = new Set();
+  return entries
+    .filter(item => item.mealDate < beforeDate)
+    .slice()
+    .sort((a, b) => compareEntries(b, a))
+    .filter(item => {
+      const key = `${item.category}|${String(item.description).trim().toLocaleLowerCase('hu-HU').replace(/\s+/g, ' ')}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
+}
+

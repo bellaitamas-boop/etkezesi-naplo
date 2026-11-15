@@ -1,11 +1,11 @@
 import { getAll, getByKey, put, remove, replaceJournalAtomically, mergeJournalAtomically, deleteMealDataAtomically } from './db.js';
-import { CATEGORIES, categoryMap, localDate, localTime, parseLocalDate, addDays, daysBetween, startOfWeek, weekSwipeOffset, suggestedCategory, formatDate, uuid, validateEntry, compareEntries, escapeHtml, isValidRange } from './core.js';
+import { CATEGORIES, categoryMap, localDate, localTime, parseLocalDate, addDays, daysBetween, startOfWeek, weekSwipeOffset, suggestedCategory, formatDate, uuid, validateEntry, compareEntries, escapeHtml, isValidRange, isBackupReminderDue, weeklyLogSummary, recentMealTemplates } from './core.js';
 import { buildBackup, suggestedBackupName, validateBackup, createMergePreview, finalizeMergePlan } from './backup.js';
 import { createJournalPdf } from './pdf.js';
 
 const DEFAULT_SETTINGS = {
   key:'app', onboardingDone:false, eveningReminderEnabled:false, eveningReminderTime:'20:00',
-  lastEveningReminderDate:null, lastFullBackupConfirmedAt:null, backupSnoozedUntil:null
+  firstUsedAt:null, lastEveningReminderDate:null, lastFullBackupConfirmedAt:null, backupSnoozedUntil:null
 };
 
 const state = {
@@ -17,6 +17,9 @@ const state = {
 const app = document.querySelector('#app');
 const modalRoot = document.querySelector('#modal-root');
 let suppressCalendarClickUntil = 0;
+let modalReturnFocus = null;
+let modalKeyHandler = null;
+let modalEscapeHandler = null;
 
 boot().catch(error => fatal(error));
 
@@ -28,6 +31,10 @@ async function boot() {
   state.tombstones = tombstones;
   state.settings = {...DEFAULT_SETTINGS, ...(settings || {})};
   state.draft = draft || null;
+  if (!state.settings.firstUsedAt) {
+    state.settings.firstUsedAt = new Date().toISOString();
+    await put('settings', {...state.settings,key:'app'});
+  }
   render();
   registerServiceWorker();
   if (!state.settings.onboardingDone) showOnboarding();
@@ -46,32 +53,61 @@ function renderTopbar() {
 
 function renderBottomNav() {
   const items=[['journal','▤','Napló'],['report','▧','Jelentés'],['settings','⚙','Beállítások']];
-  return `<nav class="bottom-nav" aria-label="Fő navigáció">${items.map(([id,icon,label])=>`<button class="nav-button ${state.view===id?'active':''}" data-view="${id}"><span>${icon}</span>${label}</button>`).join('')}</nav>`;
+  return `<nav class="bottom-nav" aria-label="Fő navigáció">${items.map(([id,icon,label])=>`<button class="nav-button ${state.view===id?'active':''}" data-view="${id}" ${state.view===id?'aria-current="page"':''}><span aria-hidden="true">${icon}</span>${label}</button>`).join('')}</nav>`;
 }
 
 function renderJournal() {
   const week = startOfWeek(state.selectedDate);
   const weekDays = daysBetween(week, addDays(week,6));
   const selected = state.entries.filter(item=>item.mealDate===state.selectedDate).sort(compareEntries);
+  const recent = recentMealTemplates(state.entries,state.selectedDate);
+  const today = localDate();
   return `<section>
     <div class="calendar-swipe" data-calendar-swipe role="group" aria-label="Heti naptár. Húzd balra vagy jobbra a hetek váltásához.">
       <div class="date-controls"><button class="icon-button" data-action="prev-week" aria-label="Előző hét">‹</button><strong>${formatDate(week,{month:'long',day:'numeric'})} – ${formatDate(addDays(week,6),{month:'long',day:'numeric'})}</strong><button class="icon-button" data-action="next-week" aria-label="Következő hét">›</button></div>
       <div class="week-strip">${weekDays.map(day=>renderDay(day)).join('')}</div>
     </div>
     <div class="date-controls"><button class="ghost-button" data-action="pick-date">📅 Dátum választása</button></div>
-    <div>${selected.length?selected.map(renderEntry).join(''):`<div class="empty-state"><div class="empty-icon">🍽️</div><strong>Még nincs bejegyzés erre a napra</strong><p>Az üres nap nem jelenti azt, hogy nem ettél.</p></div>`}</div>
+    ${renderDailyOverview(selected)}
+    ${state.selectedDate===today&&isBackupReminderDue(state.settings)?renderBackupReminderCard():''}
+    <div>${selected.length?selected.map(renderEntry).join(''):`<div class="empty-state"><div class="empty-icon" aria-hidden="true">🍽️</div><strong>Még nincs bejegyzés erre a napra</strong><p>Az üres nap nem jelenti azt, hogy nem ettél. Rögzítsd akkor, amikor kényelmes.</p><button class="primary empty-action" data-action="new-entry">Étkezés rögzítése</button></div>`}</div>
+    ${recent.length?renderRecentMeals(recent):''}
+    ${state.selectedDate===today?renderWeeklySummary():''}
     <button class="fab" data-action="new-entry" aria-label="Új bejegyzés">+</button>
   </section>`;
 }
 
+function renderDailyOverview(selected) {
+  const today=localDate(),isToday=state.selectedDate===today;
+  const category=categoryMap[suggestedCategory(localTime())];
+  const title=isToday?'Mai napló':formatDate(state.selectedDate,{weekday:'long',month:'long',day:'numeric'});
+  const status=selected.length?`${selected.length} mentett bejegyzés`:'Még nincs mentett bejegyzés';
+  const action=isToday?`${category.label} rögzítése`:'Bejegyzés hozzáadása';
+  return `<div class="daily-overview"><div><div class="daily-kicker">${escapeHtml(title)}</div><div class="daily-status">${status}</div></div><button class="primary daily-primary" data-action="new-entry">+ ${escapeHtml(action)}</button></div>`;
+}
+
+function renderBackupReminderCard() {
+  return `<aside class="backup-reminder" aria-label="Biztonsági mentési emlékeztető"><div><strong>Ideje biztonsági mentést készíteni</strong><p>A napló legalább egy hete nincs visszaigazolt mentésben.</p></div><div class="backup-reminder-actions"><button class="secondary" data-action="backup">Mentés</button><button class="ghost-button" data-action="snooze-backup">Holnap</button></div></aside>`;
+}
+
+function renderRecentMeals(recent) {
+  return `<section class="recent-section" aria-labelledby="recent-title"><div class="section-heading"><h2 id="recent-title">Korábbi étkezések</h2><span>Gyors újrafelvétel</span></div><div class="recent-grid">${recent.map(item=>`<button class="recent-meal" data-repeat-id="${item.id}" aria-label="${escapeHtml(item.description)} újbóli felvétele"><span class="recent-category" style="--cat-color:${categoryMap[item.category].color}">${escapeHtml(categoryMap[item.category].label)}</span><strong>${escapeHtml(item.description)}</strong><span>Újra felveszem</span></button>`).join('')}</div></section>`;
+}
+
+function renderWeeklySummary() {
+  const summary=weeklyLogSummary(state.entries);
+  return `<section class="weekly-summary" aria-labelledby="weekly-title"><div><h2 id="weekly-title">Az elmúlt 7 nap</h2><p><strong>${summary.loggedDays} napon</strong> van legalább egy bejegyzés. A hiányzó napokat bármikor pótolhatod.</p></div><div class="week-progress" aria-label="${summary.loggedDays} nap naplózva a legutóbbi hétből">${summary.days.map(day=>{const logged=!summary.missingDays.includes(day);return `<span class="${logged?'logged':''}" title="${formatDate(day,{month:'short',day:'numeric'})}: ${logged?'van bejegyzés':'nincs bejegyzés'}" aria-label="${formatDate(day,{month:'long',day:'numeric'})}: ${logged?'van bejegyzés':'nincs bejegyzés'}">${parseLocalDate(day).getDate()}</span>`;}).join('')}</div></section>`;
+}
+
 function renderDay(day) {
   const date=parseLocalDate(day), has=state.entries.some(item=>item.mealDate===day);
-  return `<button class="day-button ${day===state.selectedDate?'active':''} ${day===localDate()?'today':''}" data-date="${day}"><span class="weekday">${new Intl.DateTimeFormat('hu-HU',{weekday:'short'}).format(date).replace('.','')}</span><span class="day-number">${date.getDate()}</span>${has?'<i class="entry-dot"></i>':''}</button>`;
+  const count=state.entries.filter(item=>item.mealDate===day).length;
+  return `<button class="day-button ${day===state.selectedDate?'active':''} ${day===localDate()?'today':''}" data-date="${day}" aria-pressed="${day===state.selectedDate}" aria-label="${formatDate(day,{weekday:'long',month:'long',day:'numeric'})}, ${count?`${count} bejegyzés`:'nincs bejegyzés'}"><span class="weekday">${new Intl.DateTimeFormat('hu-HU',{weekday:'short'}).format(date).replace('.','')}</span><span class="day-number">${date.getDate()}</span>${has?`<i class="entry-count" aria-hidden="true">${count}</i>`:''}</button>`;
 }
 
 function renderEntry(entry) {
   const category=categoryMap[entry.category], expanded=state.expanded.has(entry.id), long=entry.description.length>130 || entry.description.split('\n').length>3;
-  return `<article class="card entry-card" style="--entry-color:${category.color}" data-entry-id="${entry.id}"><div class="entry-color"></div><div class="entry-content"><div class="entry-header"><strong>${category.label}</strong><span class="entry-time">${entry.mealTime}</span></div><p class="entry-description ${expanded?'':'collapsed'}">${escapeHtml(entry.description)}</p>${long?`<button class="expand-button" data-expand="${entry.id}">${expanded?'Kevesebb':'Továbbiak'}</button>`:''}</div></article>`;
+  return `<article class="card entry-card" style="--entry-color:${category.color}" data-entry-id="${entry.id}"><div class="entry-color"></div><div class="entry-content"><div class="entry-header"><strong>${category.label}</strong><div class="entry-meta"><span class="entry-time">${entry.mealTime}</span><button class="entry-edit" data-edit-id="${entry.id}" aria-label="${escapeHtml(category.label)} bejegyzés szerkesztése">Szerkesztés</button></div></div><p class="entry-description ${expanded?'':'collapsed'}">${escapeHtml(entry.description)}</p>${long?`<button class="expand-button" data-expand="${entry.id}">${expanded?'Kevesebb':'Továbbiak'}</button>`:''}</div></article>`;
 }
 
 function renderReport() {
@@ -100,7 +136,12 @@ function bindMainEvents() {
   app.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>{state.view=button.dataset.view;render();});
   app.querySelectorAll('[data-date]').forEach(button=>button.onclick=()=>{if(Date.now()<suppressCalendarClickUntil)return;state.selectedDate=button.dataset.date;render();});
   app.querySelectorAll('[data-expand]').forEach(button=>button.onclick=e=>{e.stopPropagation();const id=button.dataset.expand;state.expanded.has(id)?state.expanded.delete(id):state.expanded.add(id);render();});
-  app.querySelectorAll('[data-entry-id]').forEach(card=>card.onclick=e=>{if(e.target.closest('[data-expand]'))return;openEditor(state.entries.find(x=>x.id===card.dataset.entryId));});
+  app.querySelectorAll('[data-entry-id]').forEach(card=>{
+    const open=e=>{if(e.target.closest('[data-expand],[data-edit-id]'))return;openEditor(state.entries.find(x=>x.id===card.dataset.entryId));};
+    card.onclick=open;
+  });
+  app.querySelectorAll('[data-edit-id]').forEach(button=>button.onclick=e=>{e.stopPropagation();openEditor(state.entries.find(x=>x.id===button.dataset.editId));});
+  app.querySelectorAll('[data-repeat-id]').forEach(button=>button.onclick=()=>repeatMeal(button.dataset.repeatId));
   app.querySelectorAll('[data-range]').forEach(button=>button.onclick=()=>setReportRange(button.dataset.range));
   const start=app.querySelector('#report-start'),end=app.querySelector('#report-end');
   if(start)start.onchange=()=>{state.report.start=start.value;state.report.preset='custom';render();};
@@ -145,7 +186,7 @@ function bindCalendarSwipe() {
   surface.onpointercancel=reset;
 }
 
-function handleAction(action) {
+async function handleAction(action) {
   if(action==='today'){state.selectedDate=localDate();render();}
   if(action==='prev-week'){state.selectedDate=addDays(state.selectedDate,-7);render();}
   if(action==='next-week'){state.selectedDate=addDays(state.selectedDate,7);render();}
@@ -153,9 +194,21 @@ function handleAction(action) {
   if(action==='new-entry')startNewEntry();
   if(action==='generate-pdf')showPdfPreview();
   if(action==='backup')showBackupDialog();
+  if(action==='snooze-backup'){await saveSettings({backupSnoozedUntil:new Date(Date.now()+86400000).toISOString()});toast('Holnap ismét emlékeztetünk.');}
   if(action==='restore')chooseRestoreFile();
   if(action==='onboarding')showOnboarding(true);
   if(action==='delete-all')startDeleteAll();
+}
+
+function repeatMeal(id) {
+  const source=state.entries.find(item=>item.id===id);
+  if(!source)return;
+  openEditor(null,{
+    mealDate:state.selectedDate,
+    mealTime:state.selectedDate===localDate()?localTime():source.mealTime,
+    category:source.category,
+    description:source.description
+  });
 }
 
 function setReportRange(value) {
@@ -183,25 +236,24 @@ function openEditor(existing=null,draft=null,originalOverride=null) {
   const initial=existing?{...existing}:draft?{...draft}:{mealDate:state.selectedDate,mealTime:localTime(now),category:suggestedCategory(localTime(now)),description:''};
   const isNew=!existing;
   state.editor={isNew,original:originalOverride || JSON.stringify(initial),entry:initial,categoryTouched:Boolean(draft),timer:null};
-  modalRoot.innerHTML=`<div class="sheet-backdrop"><section class="bottom-sheet" role="dialog" aria-modal="true"><div class="sheet-handle"></div><div class="sheet-header"><button class="ghost-button" id="editor-close">Mégse</button><h2>${isNew?'Új bejegyzés':'Bejegyzés szerkesztése'}</h2><button class="ghost-button" id="editor-save">Mentés</button></div>
-    <div class="field"><span class="field-label">Kategória</span><div class="category-grid">${CATEGORIES.map(([id,label,color])=>`<button class="category-choice ${initial.category===id?'selected':''}" style="--cat-color:${color}" data-category="${id}"><i class="category-dot"></i>${label}</button>`).join('')}</div><div class="error-text" id="category-error"></div></div>
-    <div class="two-col"><div class="field"><label for="meal-date">Dátum</label><input id="meal-date" type="date" value="${initial.mealDate}"><div class="error-text" id="mealDate-error"></div></div><div class="field"><label for="meal-time">Időpont</label><input id="meal-time" type="time" value="${initial.mealTime}"><div class="error-text" id="mealTime-error"></div></div></div>
-    <div class="field"><label for="meal-description">Leírás</label><textarea id="meal-description" placeholder="Mit ettél vagy ittál? Lehetőleg az összetevőket is írd le.">${escapeHtml(initial.description)}</textarea><div class="error-text" id="description-error"></div></div>
-    ${!isNew?'<button class="danger-button" id="entry-delete">Bejegyzés törlése</button>':''}</section></div>`;
+  presentModal(`<div class="sheet-backdrop"><section class="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="editor-title"><div class="sheet-handle" aria-hidden="true"></div><div class="sheet-header"><button class="ghost-button" id="editor-close">Mégse</button><h2 id="editor-title">${isNew?'Új bejegyzés':'Bejegyzés szerkesztése'}</h2><button class="ghost-button" id="editor-save">Mentés</button></div>
+    <div class="field"><span class="field-label" id="category-label">Kategória</span><div class="category-grid" role="group" aria-labelledby="category-label">${CATEGORIES.map(([id,label,color])=>`<button class="category-choice ${initial.category===id?'selected':''}" style="--cat-color:${color}" data-category="${id}" aria-pressed="${initial.category===id}"><i class="category-dot" aria-hidden="true"></i>${label}</button>`).join('')}</div><div class="error-text" id="category-error" aria-live="polite"></div></div>
+    <div class="two-col"><div class="field"><label for="meal-date">Dátum</label><input id="meal-date" type="date" value="${initial.mealDate}" aria-describedby="mealDate-error"><div class="error-text" id="mealDate-error" aria-live="polite"></div></div><div class="field"><label for="meal-time">Időpont</label><input id="meal-time" type="time" value="${initial.mealTime}" aria-describedby="mealTime-error"><div class="error-text" id="mealTime-error" aria-live="polite"></div></div></div>
+    <div class="field"><label for="meal-description">Leírás</label><textarea id="meal-description" aria-describedby="description-error" placeholder="Mit ettél vagy ittál? Lehetőleg az összetevőket is írd le.">${escapeHtml(initial.description)}</textarea><div class="error-text" id="description-error" aria-live="polite"></div></div>
+    ${!isNew?'<button class="danger-button" id="entry-delete">Bejegyzés törlése</button>':''}</section></div>`,{onEscape:closeEditor,initialFocus:'#meal-description'});
   const sync=()=>{
     state.editor.entry.mealDate=modalRoot.querySelector('#meal-date').value;
     state.editor.entry.mealTime=modalRoot.querySelector('#meal-time').value;
     state.editor.entry.description=modalRoot.querySelector('#meal-description').value;
     if(isNew)scheduleDraftSave();
   };
-  modalRoot.querySelectorAll('[data-category]').forEach(button=>button.onclick=()=>{state.editor.entry.category=button.dataset.category;state.editor.categoryTouched=true;modalRoot.querySelectorAll('[data-category]').forEach(b=>b.classList.toggle('selected',b===button));if(isNew)scheduleDraftSave();});
+  modalRoot.querySelectorAll('[data-category]').forEach(button=>button.onclick=()=>{state.editor.entry.category=button.dataset.category;state.editor.categoryTouched=true;modalRoot.querySelectorAll('[data-category]').forEach(b=>{b.classList.toggle('selected',b===button);b.setAttribute('aria-pressed',String(b===button));});if(isNew)scheduleDraftSave();});
   modalRoot.querySelector('#meal-date').oninput=sync;
-  modalRoot.querySelector('#meal-time').oninput=()=>{sync();if(isNew&&!state.editor.categoryTouched){state.editor.entry.category=suggestedCategory(state.editor.entry.mealTime);modalRoot.querySelectorAll('[data-category]').forEach(b=>b.classList.toggle('selected',b.dataset.category===state.editor.entry.category));}};
+  modalRoot.querySelector('#meal-time').oninput=()=>{sync();if(isNew&&!state.editor.categoryTouched){state.editor.entry.category=suggestedCategory(state.editor.entry.mealTime);modalRoot.querySelectorAll('[data-category]').forEach(b=>{const selected=b.dataset.category===state.editor.entry.category;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});}};
   const textarea=modalRoot.querySelector('#meal-description'); textarea.oninput=()=>{sync();textarea.style.height='auto';textarea.style.height=Math.min(textarea.scrollHeight,260)+'px';};
   modalRoot.querySelector('#editor-save').onclick=saveEditor;
   modalRoot.querySelector('#editor-close').onclick=closeEditor;
   if(!isNew)modalRoot.querySelector('#entry-delete').onclick=()=>confirmDeleteEntry(existing);
-  setTimeout(()=>textarea.focus(),100);
 }
 
 function scheduleDraftSave() {
@@ -215,7 +267,9 @@ function scheduleDraftSave() {
 async function saveEditor() {
   const item=state.editor.entry,errors=validateEntry(item);
   modalRoot.querySelectorAll('.error-text').forEach(node=>node.textContent='');
-  Object.entries(errors).forEach(([key,msg])=>{const node=modalRoot.querySelector(`#${key}-error`);if(node)node.textContent=msg;});
+  modalRoot.querySelectorAll('input,textarea').forEach(node=>node.removeAttribute('aria-invalid'));
+  const fieldIds={mealDate:'meal-date',mealTime:'meal-time',description:'meal-description'};
+  Object.entries(errors).forEach(([key,msg])=>{const node=modalRoot.querySelector(`#${key}-error`);if(node)node.textContent=msg;const input=fieldIds[key]?modalRoot.querySelector(`#${fieldIds[key]}`):null;if(input)input.setAttribute('aria-invalid','true');});
   if(Object.keys(errors).length)return;
   const now=new Date().toISOString();
   const saved=state.editor.isNew?{...item,id:uuid(),createdAt:now,updatedAt:now,revision:1}:{...item,updatedAt:now,revision:(item.revision||1)+1};
@@ -223,23 +277,23 @@ async function saveEditor() {
     await put('entries',saved);
     if(state.editor.isNew){clearTimeout(state.editor.timer);await remove('drafts','active');state.draft=null;}
     const index=state.entries.findIndex(x=>x.id===saved.id); if(index>=0)state.entries[index]=saved;else state.entries.push(saved);state.entries.sort(compareEntries);
-    state.selectedDate=saved.mealDate;modalRoot.innerHTML='';state.editor=null;render();toast('A bejegyzés mentve.');
+    state.selectedDate=saved.mealDate;closeModal();state.editor=null;render();toast('A bejegyzés mentve.');
   }catch(error){toast('A mentés nem sikerült. Az adatok nem vesztek el.','error');}
 }
 
 function closeEditor() {
   const changed=JSON.stringify(state.editor.entry)!==state.editor.original;
-  if(!changed){modalRoot.innerHTML='';state.editor=null;return;}
+  if(!changed){closeModal();state.editor=null;return;}
   if(state.editor.isNew){
     clearTimeout(state.editor.timer);
     const draft={...state.editor.entry,key:'active',updatedAt:new Date().toISOString()};
     put('drafts',draft).then(()=>{state.draft=draft;toast('A piszkozatot megőriztük.');}).catch(()=>toast('A piszkozat mentése nem sikerült.','error'));
-    modalRoot.innerHTML='';state.editor=null;return;
+    closeModal();state.editor=null;return;
   }
   const editor=state.editor;
   showModal(`<h2>Mentetlen módosítások</h2><p>Mit szeretnél tenni?</p><div class="modal-actions"><button class="primary" id="save-changes">Módosítások mentése</button><button class="danger-button" id="discard-changes">Módosítások elvetése</button><button class="secondary" id="continue-edit">Szerkesztés folytatása</button></div>`);
   modalRoot.querySelector('#save-changes').onclick=()=>{state.editor=editor;openEditorFromStateAndSave(editor);};
-  modalRoot.querySelector('#discard-changes').onclick=()=>{modalRoot.innerHTML='';state.editor=null;};
+  modalRoot.querySelector('#discard-changes').onclick=()=>{closeModal();state.editor=null;};
   modalRoot.querySelector('#continue-edit').onclick=()=>openEditor(editor.entry,null,editor.original);
 }
 
@@ -259,8 +313,8 @@ function showPdfPreview() {
     const blob=createJournalPdf({start:state.report.start,end:state.report.end,entries});
     if(state.pdfUrl)URL.revokeObjectURL(state.pdfUrl);state.pdfUrl=URL.createObjectURL(blob);
     const fileName=`etkezesi_naplo_${state.report.start}_${state.report.end}.pdf`;
-    modalRoot.innerHTML=`<section class="full-screen"><header class="preview-bar"><button class="ghost-button" id="preview-back">Vissza</button><strong>PDF-előnézet</strong><div class="preview-actions"><button class="secondary" id="pdf-share">Megosztás</button><button class="primary" id="pdf-download">Letöltés</button></div></header><iframe class="preview-frame" title="Étkezési napló PDF-előnézete" src="${state.pdfUrl}"></iframe></section>`;
-    modalRoot.querySelector('#preview-back').onclick=()=>{modalRoot.innerHTML='';};
+    presentModal(`<section class="full-screen" role="dialog" aria-modal="true" aria-labelledby="preview-title"><header class="preview-bar"><button class="ghost-button" id="preview-back">Vissza</button><strong id="preview-title">PDF-előnézet</strong><div class="preview-actions"><button class="secondary" id="pdf-share">Megosztás</button><button class="primary" id="pdf-download">Letöltés</button></div></header><iframe class="preview-frame" title="Étkezési napló PDF-előnézete" src="${state.pdfUrl}"></iframe></section>`,{onEscape:closeModal,initialFocus:'#preview-back'});
+    modalRoot.querySelector('#preview-back').onclick=closeModal;
     modalRoot.querySelector('#pdf-download').onclick=()=>downloadBlob(blob,fileName);
     modalRoot.querySelector('#pdf-share').onclick=()=>shareFile(blob,fileName,'application/pdf');
   }catch(error){toast('A PDF elkészítése nem sikerült. Próbáld újra.','error');}
@@ -344,8 +398,8 @@ function confirmDeleteAll() {
 function showOnboarding(replay=false) {
   state.onboardingPage=0;
   const pages=[['📝','Étkezések rögzítése','Írd le, mit ettél vagy ittál, lehetőleg az összetevőkkel és mennyiségekkel. A kategória és az időpont módosítható.'],['📄','Orvosi PDF','Válassz dátumtartományt, majd készíts áttekinthető, megosztható jelentést.'],['🔒','Helyi adatok és mentés','A napló az eszközödön marad. Készíts rendszeresen teljes biztonsági mentést, mert az alkalmazás eltávolításakor az adatok elveszhetnek.']];
-  const draw=()=>{const [icon,title,text]=pages[state.onboardingPage];modalRoot.innerHTML=`<section class="onboarding"><div class="onboarding-card"><div class="onboarding-visual">${icon}</div><h1>${title}</h1><p>${text}</p><div class="dots">${pages.map((_,i)=>`<i class="${i===state.onboardingPage?'active':''}"></i>`).join('')}</div><div class="onboarding-actions"><button class="secondary" id="onboarding-skip">Kihagyás</button><button class="primary" id="onboarding-next">${state.onboardingPage===pages.length-1?'Kezdés':'Tovább'}</button></div></div></section>`;modalRoot.querySelector('#onboarding-skip').onclick=finish;modalRoot.querySelector('#onboarding-next').onclick=()=>{if(state.onboardingPage<pages.length-1){state.onboardingPage++;draw();}else finish();};};
-  const finish=async()=>{if(!replay)await saveSettings({onboardingDone:true},false);modalRoot.innerHTML='';if(!replay)setTimeout(runOpenReminders,150);};draw();
+  const draw=()=>{const [icon,title,text]=pages[state.onboardingPage];presentModal(`<section class="onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><div class="onboarding-card"><div class="onboarding-visual" aria-hidden="true">${icon}</div><h1 id="onboarding-title">${title}</h1><p>${text}</p><div class="dots" aria-label="${state.onboardingPage+1}. oldal, összesen ${pages.length}">${pages.map((_,i)=>`<i class="${i===state.onboardingPage?'active':''}" aria-hidden="true"></i>`).join('')}</div><div class="onboarding-actions"><button class="secondary" id="onboarding-skip">Kihagyás</button><button class="primary" id="onboarding-next">${state.onboardingPage===pages.length-1?'Kezdés':'Tovább'}</button></div></div></section>`,{onEscape:finish,initialFocus:'#onboarding-next'});modalRoot.querySelector('#onboarding-skip').onclick=finish;modalRoot.querySelector('#onboarding-next').onclick=()=>{if(state.onboardingPage<pages.length-1){state.onboardingPage++;draw();}else finish();};};
+  const finish=async()=>{if(!replay)await saveSettings({onboardingDone:true},false);closeModal();if(!replay)setTimeout(runOpenReminders,150);};draw();
 }
 
 async function runOpenReminders() {
@@ -354,19 +408,49 @@ async function runOpenReminders() {
     showModal(`<h2>Félbehagyott bejegyzés</h2><p>Van egy automatikusan mentett piszkozatod.</p><div class="modal-actions"><button class="primary" id="open-draft">Folytatás</button><button class="danger-button" id="drop-draft">Elvetés</button><button class="secondary" data-close>Később</button></div>`);
     modalRoot.querySelector('#open-draft').onclick=()=>{closeModal();openEditor(null,state.draft);};modalRoot.querySelector('#drop-draft').onclick=async()=>{await remove('drafts','active');state.draft=null;closeModal();};return;
   }
-  const last=state.settings.lastFullBackupConfirmedAt?new Date(state.settings.lastFullBackupConfirmedAt):null;
-  const due=!last||Date.now()-last.getTime()>=7*86400000;
-  const snoozed=state.settings.backupSnoozedUntil&&new Date(state.settings.backupSnoozedUntil)>now;
-  if(due&&!snoozed){showModal(`<h2>Ideje biztonsági mentést készíteni</h2><p>Legalább 7 nap telt el az utolsó visszaigazolt teljes mentés óta.</p><div class="modal-actions"><button class="primary" id="reminder-backup">Biztonsági mentés készítése</button><button class="secondary" id="reminder-tomorrow">Emlékeztess holnap</button></div>`);modalRoot.querySelector('#reminder-backup').onclick=showBackupDialog;modalRoot.querySelector('#reminder-tomorrow').onclick=async()=>{await saveSettings({backupSnoozedUntil:new Date(Date.now()+86400000).toISOString()},false);closeModal();};return;}
   if(state.settings.eveningReminderEnabled&&time>=state.settings.eveningReminderTime&&state.settings.lastEveningReminderDate!==today){await saveSettings({lastEveningReminderDate:today},false);showModal(`<h2>Esti naplóellenőrzés</h2><p>Nézd át, hogy minden mai étkezést rögzítettél-e.</p><div class="modal-actions"><button class="primary" id="open-today">Mai nap megnyitása</button><button class="secondary" data-close>Rendben</button></div>`);modalRoot.querySelector('#open-today').onclick=()=>{state.view='journal';state.selectedDate=today;closeModal();render();};}
 }
 
 async function saveSettings(changes,rerender=true){state.settings={...state.settings,...changes,key:'app'};await put('settings',state.settings);if(rerender)render();}
 async function reloadState(){const [entries,tombstones,settings,draft]=await Promise.all([getAll('entries'),getAll('tombstones'),getByKey('settings','app'),getByKey('drafts','active')]);state.entries=entries.sort(compareEntries);state.tombstones=tombstones;state.settings={...DEFAULT_SETTINGS,...(settings||{})};state.draft=draft||null;}
 
-function showModal(content){modalRoot.innerHTML=`<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true">${content}</section></div>`;modalRoot.querySelectorAll('[data-close]').forEach(button=>button.onclick=closeModal);}
-function closeModal(){modalRoot.innerHTML='';}
-function toast(message,type=''){const root=document.querySelector('#toast-root');root.innerHTML=`<div class="toast ${type}">${escapeHtml(message)}</div>`;setTimeout(()=>{root.innerHTML='';},3600);}
+function showModal(content){presentModal(`<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true">${content}</section></div>`,{onEscape:closeModal});modalRoot.querySelectorAll('[data-close]').forEach(button=>button.onclick=closeModal);}
+
+function presentModal(content,{onEscape=null,initialFocus=null}={}) {
+  if(!modalReturnFocus)modalReturnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  if(modalKeyHandler)document.removeEventListener('keydown',modalKeyHandler);
+  modalRoot.innerHTML=content;
+  const dialog=modalRoot.querySelector('[role="dialog"]');
+  const heading=dialog?.querySelector('h1,h2');
+  if(dialog&&heading&&!dialog.hasAttribute('aria-labelledby')){if(!heading.id)heading.id=`dialog-title-${Date.now()}`;dialog.setAttribute('aria-labelledby',heading.id);}
+  app.inert=true;
+  document.body.classList.add('modal-open');
+  modalEscapeHandler=onEscape;
+  modalKeyHandler=event=>{
+    if(event.key==='Escape'&&modalEscapeHandler){event.preventDefault();modalEscapeHandler();return;}
+    if(event.key!=='Tab')return;
+    const focusable=[...modalRoot.querySelectorAll('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),iframe,[tabindex]:not([tabindex="-1"])')].filter(node=>!node.hidden&&node.getClientRects().length);
+    if(!focusable.length)return;
+    const first=focusable[0],last=focusable[focusable.length-1];
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  };
+  document.addEventListener('keydown',modalKeyHandler);
+  requestAnimationFrame(()=>{
+    const target=(initialFocus&&modalRoot.querySelector(initialFocus))||modalRoot.querySelector('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),iframe,[tabindex]:not([tabindex="-1"])');
+    target?.focus();
+  });
+}
+
+function closeModal(){
+  if(modalKeyHandler)document.removeEventListener('keydown',modalKeyHandler);
+  modalKeyHandler=null;modalEscapeHandler=null;
+  modalRoot.innerHTML='';app.inert=false;document.body.classList.remove('modal-open');
+  const target=modalReturnFocus;modalReturnFocus=null;
+  requestAnimationFrame(()=>target?.isConnected&&target.focus());
+}
+
+function toast(message,type=''){const root=document.querySelector('#toast-root');root.innerHTML=`<div class="toast ${type}" role="${type==='error'?'alert':'status'}" aria-live="${type==='error'?'assertive':'polite'}">${escapeHtml(message)}</div>`;setTimeout(()=>{root.innerHTML='';},3600);}
 
 function downloadBlob(blob,fileName) {
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=fileName;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);

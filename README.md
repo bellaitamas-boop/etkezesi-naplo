@@ -5,11 +5,12 @@ Magyar nyelvű, mobil-first, telepíthető PWA étkezések időrendi rögzítés
 ## Fő funkciók
 
 - napi napló heti dátumsávval, kategóriákkal, szerkesztéssel és törléssel;
+- napi állapotkártya, semleges 7 napos naplózási összegzés és korábbi étkezések gyors újrafelvétele;
 - automatikusan mentett egyetlen újbejegyzés-piszkozat;
 - A4-es, többoldalas PDF, alkalmazáson belüli előnézettel és megosztással/letöltéssel;
-- teljes vagy részleges, verziózott JSON-biztonsági mentés;
+- teljes vagy részleges, verziózott biztonsági mentési fájl;
 - atomikus teljes visszaállítás vagy konfliktusokat jelző intelligens egyesítés;
-- esti, csak megnyitáskor működő ellenőrzési emlékeztető és 7 napos mentési emlékeztető;
+- esti, csak megnyitáskor működő ellenőrzési emlékeztető és az első hét után megjelenő, nem blokkoló mentési emlékeztető;
 - offline alkalmazáshéj service workerrel;
 - háromképernyős első indítási bemutató.
 
@@ -46,13 +47,13 @@ Minden erőforrás relatív útvonalat használ, ezért a projekt repository-ala
 
 - Az étkezések, a piszkozat és a beállítások az adott böngészőprofilban maradnak.
 - Alkalmazáseltávolítás, böngészőadat-törlés vagy operációsrendszer-tárhelytisztítás adatvesztést okozhat.
-- Eszközváltáshoz készíts teljes JSON-mentést, majd az új eszközön importáld.
-- A PDF és JSON mentésekor az alkalmazás az operációs rendszer megosztási felületét használja, ha elérhető; egyébként fájlletöltést indít.
+- Eszközváltáshoz készíts teljes biztonsági mentést, majd az új eszközön állítsd vissza.
+- A PDF és a biztonsági mentés készítésekor az alkalmazás az operációs rendszer megosztási felületét használja, ha elérhető; egyébként fájlletöltést indít.
 
 ## Korlátok és ellenőrzési státusz
 
 - A kód és az automatikus logikai tesztek helyben ellenőrizhetők.
-- Valódi Android Chrome/telepített PWA teszt **még nem történt**.
+- Valódi Android Chrome-ban a telepítés és az alapvető naplóhasználat sikeresen kipróbálva; a teljes eszközteszt-lista még nincs lezárva.
 - Valódi iPhone Safari/kezdőképernyős PWA teszt **még nem történt**.
 - A PDF-ben a standard Helvetica betűkészletet használjuk; a magyar `ő/ű` jeleket vektoros kettős ékezettel rajzolja ki a generátor. Ezt valódi Androidon és iPhone-on vizuálisan is ellenőrizni kell.
 
