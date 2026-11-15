@@ -156,16 +156,20 @@ function bindMainEvents() {
 
 function bindFabVisibility() {
   if(fabObserver){fabObserver.disconnect();fabObserver=null;}
-  const primary=app.querySelector('.daily-primary'),fab=app.querySelector('.fab');
+  const triggers=[...app.querySelectorAll('[data-action="new-entry"]:not(.fab)')],fab=app.querySelector('.fab');
   if(!fab)return;
   const setVisible=visible=>{
     fab.classList.toggle('is-visible',visible);
     fab.setAttribute('aria-hidden',String(!visible));
     fab.tabIndex=visible?0:-1;
   };
-  if(!primary||!('IntersectionObserver' in window)){setVisible(true);return;}
-  fabObserver=new IntersectionObserver(([entry])=>setVisible(!entry.isIntersecting),{threshold:.05});
-  fabObserver.observe(primary);
+  if(!triggers.length||!('IntersectionObserver' in window)){setVisible(true);return;}
+  const visible=new Map(triggers.map(trigger=>[trigger,false]));
+  fabObserver=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>visible.set(entry.target,entry.isIntersecting));
+    setVisible(![...visible.values()].some(Boolean));
+  },{threshold:.05});
+  triggers.forEach(trigger=>fabObserver.observe(trigger));
 }
 
 function bindCalendarSwipe() {
